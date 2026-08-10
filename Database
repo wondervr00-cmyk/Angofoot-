@@ -1,0 +1,11 @@
+DATABASE_URL="file:./dev.db"
+JWT_SECRET="troca-isto-por-um-segredo-forte"
+PORT=4000
+CLIENT_URL="http://localhost:5173"
+
+# Número de WhatsApp do desenvolvedor, formato internacional sem "+" (ex: 244930336096)
+DEVELOPER_WHATSAPP="244930336096"
+
+# Chave secreta que só o desenvolvedor conhece, usada para ativar campeonatos/ligas/torneios
+# manualmente depois de confirmar o pagamento via WhatsApp (cabeçalho x-admin-key).
+ADMIN_KEY="troca-isto-por-uma-chave-secreta"
