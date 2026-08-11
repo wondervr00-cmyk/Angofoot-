@@ -1,0 +1,332 @@
+// AngoFoot — Database schema
+// Run: npx prisma migrate dev --name init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum AccountType {
+  JOGADOR
+  GUARDA_REDES
+  EQUIPA
+  EQUIPA_TECNICA
+  ARBITRO
+  TREINADOR
+  PRESIDENTE
+  ADEPTO
+  CAMPEONATO
+  LIGA
+  TORNEIO
+  MISTO
+}
+
+enum SportMode {
+  FUTEBOL_11
+  FUTSAL
+  FUTEBOL_SALAO
+  EQUIPA
+  MISTO
+}
+
+enum CompetitionType {
+  CAMPEONATO
+  LIGA
+  TORNEIO
+}
+
+enum PlanType {
+  MENSAL
+  ANUAL
+}
+
+enum PaymentStatus {
+  PENDENTE
+  PAGO
+  FALHADO
+}
+
+enum MatchType {
+  OFICIAL
+  AMIGAVEL
+}
+
+enum MatchStatus {
+  AGENDADO
+  EM_DIRETO
+  INTERVALO
+  TERMINADO
+  ADIADO
+}
+
+enum EventType {
+  GOLO
+  CARTAO_AMARELO
+  CARTAO_VERMELHO
+  SUBSTITUICAO
+  LESAO
+  ACRESCIMO
+  INICIO
+  INTERVALO
+  FIM
+}
+
+model User {
+  id           String      @id @default(cuid())
+  name         String
+  email        String      @unique
+  phone        String?
+  passwordHash String
+  accountType  AccountType
+  avatarUrl    String?
+  bio          String?
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  // Player-specific fields
+  clubId        String?
+  club          Team?      @relation("ClubPlayers", fields: [clubId], references: [id])
+  positions     String?    // JSON array, max 2
+  dominantFoot  String?    // "esquerdo" | "direito" | "ambidestro"
+  skills        String?    // JSON array of skill tags
+
+  // Coach-specific
+  coachesTeamId String?
+  coachesTeam   Team?      @relation("CoachOf", fields: [coachesTeamId], references: [id])
+
+  posts         Post[]
+  messagesSent     Message[]  @relation("MessagesSent")
+  messagesReceived Message[]  @relation("MessagesReceived")
+  followsPlayers   Follow[]   @relation("FollowerUser")
+  productsListed   Product[]
+  pollVotes        PollVote[]
+  joinRequests     JoinRequest[]
+  organizedCompetitions Competition[] @relation("Organizer")
+  refereeMatches   Match[]    @relation("MatchReferee")
+
+  followers     Follow[]    @relation("FollowedUser")
+}
+
+model Team {
+  id          String     @id @default(cuid())
+  name        String
+  crestUrl    String?
+  sportMode   SportMode  @default(FUTEBOL_11)
+  description String?
+  createdAt   DateTime   @default(now())
+
+  players       User[]        @relation("ClubPlayers")
+  coaches       User[]        @relation("CoachOf")
+  competitions  CompetitionTeam[]
+  homeMatches   Match[]        @relation("HomeTeam")
+  awayMatches   Match[]        @relation("AwayTeam")
+  joinRequests  JoinRequest[]
+  followers     Follow[]       @relation("FollowedTeam")
+  teamStats     TeamStats?
+}
+
+model JoinRequest {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  teamId    String
+  team      Team     @relation(fields: [teamId], references: [id])
+  status    String   @default("PENDENTE") // PENDENTE | ACEITE | RECUSADO
+  createdAt DateTime @default(now())
+}
+
+model Competition {
+  id           String          @id @default(cuid())
+  name         String
+  type         CompetitionType
+  logoUrl      String?
+  organizerId  String
+  organizer    User            @relation("Organizer", fields: [organizerId], references: [id])
+  planType     PlanType
+  paymentStatus PaymentStatus  @default(PENDENTE)
+  active       Boolean         @default(false)
+  createdAt    DateTime        @default(now())
+
+  teams        CompetitionTeam[]
+  matches      Match[]
+  standings    CompetitionStanding[]
+  polls        Poll[]
+}
+
+model CompetitionTeam {
+  id            String      @id @default(cuid())
+  competitionId String
+  competition   Competition @relation(fields: [competitionId], references: [id])
+  teamId        String
+  team          Team        @relation(fields: [teamId], references: [id])
+}
+
+model Match {
+  id            String       @id @default(cuid())
+  competitionId String?
+  competition   Competition? @relation(fields: [competitionId], references: [id])
+  matchType     MatchType    @default(OFICIAL)
+  sportMode     SportMode    @default(FUTEBOL_11)
+  homeTeamId    String
+  homeTeam      Team         @relation("HomeTeam", fields: [homeTeamId], references: [id])
+  awayTeamId    String
+  awayTeam      Team         @relation("AwayTeam", fields: [awayTeamId], references: [id])
+  venue         String?
+  refereeId     String?
+  referee       User?        @relation("MatchReferee", fields: [refereeId], references: [id])
+  kickoff       DateTime
+  status        MatchStatus  @default(AGENDADO)
+  minute        Int          @default(0)
+  homeScore     Int          @default(0)
+  awayScore     Int          @default(0)
+
+  events        MatchEvent[]
+  lineups       Lineup[]
+  polls         Poll[]
+}
+
+model Lineup {
+  id        String   @id @default(cuid())
+  matchId   String
+  match     Match    @relation(fields: [matchId], references: [id])
+  teamId    String
+  formation String?  // e.g. "4-3-3"
+  playersJson String // JSON array of {userId, shirtNumber, position, starter}
+}
+
+model MatchEvent {
+  id        String    @id @default(cuid())
+  matchId   String
+  match     Match     @relation(fields: [matchId], references: [id])
+  minute    Int
+  type      EventType
+  teamId    String?
+  playerId  String?
+  detail    String?
+  createdAt DateTime  @default(now())
+}
+
+model PlayerStats {
+  id          String  @id @default(cuid())
+  userId      String  @unique
+  matches     Int     @default(0)
+  minutes     Int     @default(0)
+  goals       Int     @default(0)
+  assists     Int     @default(0)
+  yellowCards Int     @default(0)
+  redCards    Int     @default(0)
+}
+
+model TeamStats {
+  id      String @id @default(cuid())
+  teamId  String @unique
+  team    Team   @relation(fields: [teamId], references: [id])
+  wins    Int    @default(0)
+  draws   Int    @default(0)
+  losses  Int    @default(0)
+  goalsFor     Int @default(0)
+  goalsAgainst Int @default(0)
+}
+
+model CompetitionStanding {
+  id            String      @id @default(cuid())
+  competitionId String
+  competition   Competition @relation(fields: [competitionId], references: [id])
+  teamId        String
+  points        Int         @default(0)
+  played        Int         @default(0)
+  wins          Int         @default(0)
+  draws         Int         @default(0)
+  losses        Int         @default(0)
+  goalsFor      Int         @default(0)
+  goalsAgainst  Int         @default(0)
+  fairPlayPts   Int         @default(0)
+}
+
+model Post {
+  id        String   @id @default(cuid())
+  authorId  String
+  author    User     @relation(fields: [authorId], references: [id])
+  caption   String?
+  mediaUrl  String?
+  mediaType String?  // "photo" | "video"
+  createdAt DateTime @default(now())
+}
+
+model Message {
+  id         String   @id @default(cuid())
+  senderId   String
+  sender     User     @relation("MessagesSent", fields: [senderId], references: [id])
+  receiverId String
+  receiver   User     @relation("MessagesReceived", fields: [receiverId], references: [id])
+  content    String
+  createdAt  DateTime @default(now())
+  readAt     DateTime?
+}
+
+model Follow {
+  id             String  @id @default(cuid())
+  followerId     String
+  follower       User    @relation("FollowerUser", fields: [followerId], references: [id])
+  followedUserId String?
+  followedUser   User?   @relation("FollowedUser", fields: [followedUserId], references: [id])
+  followedTeamId String?
+  followedTeam   Team?   @relation("FollowedTeam", fields: [followedTeamId], references: [id])
+
+  @@unique([followerId, followedUserId, followedTeamId])
+}
+
+model Product {
+  id          String   @id @default(cuid())
+  sellerId    String
+  seller      User     @relation(fields: [sellerId], references: [id])
+  title       String
+  description String?
+  category    String   // Chuteiras, Equipamentos, Meias, Caneleiras, Luvas, Bolas, Outros
+  price       Float
+  imageUrl    String?
+  createdAt   DateTime @default(now())
+}
+
+model Poll {
+  id            String       @id @default(cuid())
+  competitionId String?
+  competition   Competition? @relation(fields: [competitionId], references: [id])
+  matchId       String?
+  match         Match?       @relation(fields: [matchId], references: [id])
+  question      String
+  optionA       String
+  optionB       String
+  createdAt     DateTime     @default(now())
+
+  votes PollVote[]
+}
+
+model PollVote {
+  id       String @id @default(cuid())
+  pollId   String
+  poll     Poll   @relation(fields: [pollId], references: [id])
+  userId   String
+  user     User   @relation(fields: [userId], references: [id])
+  choice   String // "A" | "B"
+
+  @@unique([pollId, userId])
+}
+
+// Códigos de ativação gerados pelo desenvolvedor no Portal do Desenvolvedor.
+// O organizador de um campeonato/liga/torneio recebe um código (por WhatsApp,
+// depois de pagar) e cola-o na app para ativar a competição sozinho — sem
+// precisar de nenhum comando técnico.
+model ActivationCode {
+  id            String    @id @default(cuid())
+  code          String    @unique
+  planType      PlanType
+  redeemed      Boolean   @default(false)
+  competitionId String?   @unique
+  createdAt     DateTime  @default(now())
+  redeemedAt    DateTime?
+}
